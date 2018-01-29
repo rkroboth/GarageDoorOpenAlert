@@ -53,13 +53,13 @@ def scheduledAction(){
             log.trace "Alerts are muted... Not sending text."
         }
         else {
-            log.trace "{$contactsensor} is still open... sending push alert."
+            log.trace "${contactsensor} is still open... sending push alert."
             sendPush "Your ${contactsensor.label ?: contactsensor.name} has been open for more than ${maxOpenTime} minutes!"
             runIn(60, scheduledAction)
         }
 	}
     else {
-		log.trace "{$contactsensor} is not open... Not sending text."
+		log.trace "${contactsensor} is not open... Not sending text."
 	}
 }
 
