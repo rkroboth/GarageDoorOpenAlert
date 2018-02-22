@@ -15,7 +15,7 @@ definition(
 
 preferences {
 	section("Send a push alert when this door is open...") {
-		input "contactsensor", "capability.contactSensor", title: "Which?"
+		input "garageDoorSensors", "capability.contactSensor", title: "Which?", multiple: true
 	}
 	section("For this long...") {
 		input "maxOpenTime", "number", title: "Minutes?"
@@ -27,40 +27,70 @@ preferences {
 
 def installed()
 {
-	subscribe(contactsensor, "contact", onChange)
+	subscribe(garageDoorSensors, "contact", onChange)
 }
 
 def updated()
 {
 	unsubscribe()
-	subscribe(contactsensor, "contact", onChange)
+	subscribe(garageDoorSensors, "contact", onChange)
+    onChange([]);
 }
 
 def onChange(evt) {
-	if (evt.value == "closed") {
-        state.door_status = null
+
+    def door_status = "open";
+    garageDoorSensors.each {
+        if (it.currentState("contact").value == "closed"){
+            door_status = null; 
+        }
     }
-    if (evt.value == "open") {
-        runIn(maxOpenTime * 60, scheduledAction)
-        state.door_status = "open"
+    state.door_status = door_status;
+    
+    if (state.door_status == "open") {
+        log.trace "Garage door is currently open."
+        schedulePushAlert(maxOpenTime * 60);
+    }
+    else {
+        state.last_scheduled_push_alert_time = null;
+        log.trace "Garage door is currently closed."
     }
 }
 
-def scheduledAction(){
-	if (state.door_status == "open")
-	{
-        if (mute_alerts == true){
-            log.trace "Alerts are muted... Not sending text."
-        }
-        else {
-            log.trace "${contactsensor} is still open... sending push alert."
-            sendPush "Your ${contactsensor.label ?: contactsensor.name} has been open for more than ${maxOpenTime} minutes!"
-            runIn(60, scheduledAction)
-        }
-	}
-    else {
-		log.trace "${contactsensor} is not open... Not sending text."
-	}
+def schedulePushAlert(seconds){
+    def d = new Date();
+    def scheduled_push_alert_time = d.format("yyyy/MM/dd HH:mm:ss");
+    state.last_scheduled_push_alert_time = scheduled_push_alert_time;
+    runIn(seconds, sendPushAlert, [data : [scheduled_push_alert_time : scheduled_push_alert_time]])
+}
+
+def sendPushAlert(data){
+
+    def scheduled_push_alert_time = data.scheduled_push_alert_time
+
+    if (!state.last_scheduled_push_alert_time){
+        return;
+    }
+    if (scheduled_push_alert_time != state.last_scheduled_push_alert_time){
+        return;
+    }
+
+    state.last_scheduled_push_alert_time = null;
+    
+    if (mute_alerts){
+        log.trace "Alerts are muted... Not sending push."
+        return;
+    }
+    
+	if (state.door_status != "open"){
+		log.trace "Garage door has been closed... not sending push."
+        return;
+    }
+
+    log.trace "${garageDoorSensors} is still open... sending push alert."
+    sendPush "Your garage door has been open for more than ${maxOpenTime} minutes!"
+    schedulePushAlert(300);
+
 }
 
 
